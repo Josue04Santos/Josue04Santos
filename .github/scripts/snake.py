@@ -17,7 +17,7 @@ GAP = 3        # espaco entre quadradinhos
 PITCH = CELL + GAP
 PAD = 16       # margem
 STEP = 0.11    # segundos por passo da cobra
-START_LEN = 4  # tamanho inicial (cabeca + 3)
+START_LEN = 3  # tamanho inicial
 PAUSE = 2.0    # pausa antes de reiniciar
 
 LEVELS = ["NONE", "FIRST_QUARTILE", "SECOND_QUARTILE", "THIRD_QUARTILE", "FOURTH_QUARTILE"]
@@ -75,45 +75,47 @@ def xy(w, d):
     return PAD + w * PITCH, PAD + d * PITCH
 
 
-def build(grid, nweeks):
-    """Simula uma partida de Snake: a cobra vai atras da comida mais proxima,
-    desvia do proprio corpo, prefere seguir reto e cresce a cada bloco comido."""
+def build(grid, nweeks, cap=40):
+    """Simula uma partida de Snake de verdade: a cobra vai atras da comida mais
+    proxima, NUNCA encosta nem passa por cima do proprio corpo, prefere seguir
+    reto e so entra num caminho se depois de comer ainda consegue alcancar a
+    propria cauda (senao fica "enrolando" atras da cauda ate abrir espaco)."""
     import heapq
 
     random.seed(7)
     W, H = nweeks, 7
-    inside = lambda c: 0 <= c[0] < W and 0 <= c[1] < H
     dirs = [(1, 0), (0, 1), (-1, 0), (0, -1)]
 
+    def inside(c, allow_exit=False):
+        if allow_exit and c == (-1, 3):
+            return True
+        return 0 <= c[0] < W and 0 <= c[1] < H
+
     remaining = {c for c, lvl in grid.items() if lvl > 0}
-    # entrada pela esquerda, na linha do meio
     path = [(-3, 3), (-2, 3), (-1, 3)]
     foods, eat_steps = [], []
-    length = START_LEN
+    length = 3
 
-    def body_free_after(cell, dist):
-        # celula ocupada pelo corpo so libera depois que a cauda passar
-        n = len(path)
-        for j in range(1, min(length, n) + 1):
-            if path[n - j] == cell:
-                return dist >= length - j + 1
+    def free_after(p, L, cell, dist):
+        # celula do corpo so libera quando a cauda ja passou por ela
+        n = len(p)
+        for j in range(1, min(L, n) + 1):
+            if p[n - j] == cell:
+                return dist >= L - j + 1
         return True
 
-    def plan(targets, ghost=False):
-        head = path[-1]
-        prev = path[-2]
+    def plan(p, L, targets, allow_exit=False, avoid=frozenset()):
+        head, prev = p[-1], p[-2]
         d0 = (head[0] - prev[0], head[1] - prev[1])
         pq = [(0.0, 0, head, d0)]
-        seen = {}
-        parent = {}
+        seen, parent = set(), {}
         while pq:
             cost, dist, cell, d = heapq.heappop(pq)
             if (cell, d) in seen:
                 continue
-            seen[(cell, d)] = cost
-            if cell in targets and dist > 0:
-                out = []
-                key = (cell, d)
+            seen.add((cell, d))
+            if dist > 0 and cell in targets:
+                out, key = [], (cell, d)
                 while key in parent:
                     out.append(key[0])
                     key = parent[key]
@@ -122,46 +124,110 @@ def build(grid, nweeks):
                 if nd == (-d[0], -d[1]):
                     continue
                 nc = (cell[0] + nd[0], cell[1] + nd[1])
-                if not inside(nc) or (not ghost and not body_free_after(nc, dist + 1)):
+                if not inside(nc, allow_exit) or not free_after(p, L, nc, dist + 1):
                     continue
-                turn = 0.35 if nd != d else 0.0          # prefere seguir reto
-                jitter = random.random() * 0.15            # um pouco de "mao humana"
-                ncost = cost + 1 + turn + jitter
+                if nc in avoid and nc not in targets:
+                    continue
+                ncost = cost + 1 + (0.35 if nd != d else 0) + random.random() * 0.15
                 if (nc, nd) not in seen:
                     parent[(nc, nd)] = (cell, d)
                     heapq.heappush(pq, (ncost, dist + 1, nc, nd))
         return None
 
-    guard = 0
-    while remaining and guard < 5000:
-        guard += 1
-        route = plan(remaining)
-        if not route:
-            # encurralada: passa por cima do proprio corpo (como um jogador que arrisca)
-            route = plan(remaining, ghost=True)
-        if not route:
-            break
+    def simulate(p, L, route, rem):
+        p = list(p)
         for c in route:
-            path.append(c)
-            if c in remaining:
-                remaining.discard(c)
-                foods.append(c)
-                eat_steps.append(len(path) - 1)
-                length += 1
-                break
+            p.append(c)
+            if c in rem:
+                L += 1
+        return p, L
 
-    # terminou: sai pela direita
+    def can_reach_tail(p, L):
+        if len(p) < L + 1:
+            return True
+        return plan(p, L, {p[-L]}) is not None
+
+    def legal(p, L, c, rem):
+        body = p[-L:] if c in rem else p[-L + 1:]
+        return inside(c) and c not in body
+
+    def flood(p, L, start):
+        body = set(p[-L + 1:])
+        todo, seen = [start], {start}
+        while todo:
+            x = todo.pop()
+            for a, b in dirs:
+                n = (x[0] + a, x[1] + b)
+                if inside(n) and n not in body and n not in seen:
+                    seen.add(n)
+                    todo.append(n)
+        return len(seen)
+
+    def step(c):
+        nonlocal length
+        path.append(c)
+        if c in remaining:
+            remaining.discard(c)
+            foods.append(c)
+            eat_steps.append(len(path) - 1)
+            if length < cap:
+                length += 1
+
+    guard = 0
+    while remaining and guard < 4000:
+        guard += 1
+        route = plan(path, length, remaining, avoid=remaining)
+        if route:
+            vp, vl = simulate(path, length, route, remaining)
+            if can_reach_tail(vp, vl):
+                for c in route:
+                    if not legal(path, length, c, remaining):
+                        break
+                    step(c)
+                continue
+        # caminho arriscado: segue a propria cauda um passo e tenta de novo
+        tail_route = plan(path, length, {path[-length]}) if len(path) > length else None
+        if tail_route and legal(path, length, tail_route[0], remaining):
+            step(tail_route[0])
+            continue
+        h = path[-1]
+        opts = [(h[0] + a, h[1] + b) for a, b in dirs]
+        opts = [c for c in opts if legal(path, length, c, remaining)]
+        if not opts:
+            break
+        step(max(opts, key=lambda c: flood(path, length, c)))
+
+    # terminou: volta e sai pelo mesmo lugar onde entrou, sem encostar no corpo
+    exit_cells = {(-1, 3)}
+    for _ in range(20 * W):
+        if path[-1] == (-1, 3):
+            break
+        out = plan(path, length, exit_cells, allow_exit=True)
+        nxt = out[0] if out else None
+        if nxt is None or (nxt != (-1, 3) and not legal(path, length, nxt, remaining)):
+            h = path[-1]
+            opts = [c for c in ((h[0] + a, h[1] + b) for a, b in dirs) if legal(path, length, c, remaining)]
+            if not opts:
+                break
+            nxt = max(opts, key=lambda c: flood(path, length, c))
+        path.append(nxt)
+    if remaining or path[-1] != (-1, 3):
+        raise RuntimeError("cobra encurralada")
     h = path[-1]
-    while h[1] != 3:
-        h = (h[0], h[1] + (1 if h[1] < 3 else -1)) if body_free_after((h[0], h[1] + (1 if h[1] < 3 else -1)), 1) else (h[0] + 1, h[1])
+    for _ in range(length + 2):
+        h = (h[0] - 1, h[1])
         path.append(h)
-    for _ in range(W - h[0] + length + 2):
-        h = (h[0] + 1, h[1])
-        path.append(h)
+
+    # confere: a cabeca nunca entra no corpo
+    L, eaten = 3, set(eat_steps)
+    for k in range(3, len(path)):
+        body = path[max(0, k - L):k] if k in eaten else path[max(0, k - L + 1):k]
+        assert path[k] not in body, f"colisao no passo {k}"
+        if k in eaten and L < cap:
+            L += 1
 
     max_len = length
-    n = len(path)
-    dur = (n - 1) * STEP + PAUSE
+    dur = (len(path) - 1) * STEP + PAUSE
     eat_times = [k * STEP for k in eat_steps]
     return path, foods, eat_times, max_len, dur, list(grid)
 
@@ -215,7 +281,12 @@ def svg(theme, grid, nweeks, path, foods, eat_times, max_len, dur):
 
 def main():
     grid, nweeks = fetch_calendar() if TOKEN else fake_calendar()
-    path, foods, eat_times, max_len, dur, _ = build(grid, nweeks)
+    for cap in (40, 30, 22, 15, 10):
+        try:
+            path, foods, eat_times, max_len, dur, _ = build(grid, nweeks, cap)
+            break
+        except (RuntimeError, AssertionError) as e:
+            print(f"tamanho maximo {cap} nao coube ({e}); tentando menor")
     os.makedirs("dist", exist_ok=True)
     for name, theme in THEMES.items():
         with open(os.path.join("dist", name), "w") as f:
