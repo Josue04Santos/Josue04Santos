@@ -233,26 +233,11 @@ Contribuição e estudo do site e documentação do projeto Jellyfin.
 
 ## 🤝 Parceiros
 
-<table>
-<tr>
-<td align="center" width="160">
-<a href="https://github.com/CarlosSuporteISP">
-<img src="https://github.com/CarlosSuporteISP.png" width="90" style="border-radius:50%" alt="Carlos Santos"><br>
-<b>Carlos Santos</b>
-</a><br>
-<sub>Senior Network &amp; Infrastructure Engineer</sub>
-</td>
-<td valign="middle">
-
-**José Carlos Santos Costa** — engenheiro de redes e infraestrutura com 12+ anos em ISPs (BGP, MPLS, IPv6, Linux, Docker, Proxmox).
-
-[![GitHub](https://img.shields.io/badge/GitHub-CarlosSuporteISP-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/CarlosSuporteISP)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-carlossantosc-0A66C2?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/carlossantosc)
-[![Website](https://img.shields.io/badge/Website-All_Safe-01A982?style=flat-square&logo=googlechrome&logoColor=white)](https://allsafe.inf.br/)
-
-</td>
-</tr>
-</table>
+> **[José Carlos Santos Costa](https://github.com/CarlosSuporteISP)** — Senior Network & Infrastructure Engineer, com 12+ anos em ISPs (BGP, MPLS, IPv6, Linux, Docker, Proxmox).
+>
+> [![GitHub](https://img.shields.io/badge/GitHub-CarlosSuporteISP-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/CarlosSuporteISP)
+> [![LinkedIn](https://img.shields.io/badge/LinkedIn-carlossantosc-0A66C2?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/carlossantosc)
+> [![Website](https://img.shields.io/badge/Website-All_Safe-01A982?style=flat-square&logo=googlechrome&logoColor=white)](https://allsafe.inf.br/)
 
 ## 📬 Vamos conversar
 
