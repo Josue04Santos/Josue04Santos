@@ -16,7 +16,7 @@ CELL = 12      # tamanho do quadradinho
 GAP = 3        # espaco entre quadradinhos
 PITCH = CELL + GAP
 PAD = 16       # margem
-STEP = 0.09    # segundos por passo da cobra
+STEP = 0.11    # segundos por passo da cobra
 START_LEN = 4  # tamanho inicial (cabeca + 3)
 PAUSE = 2.0    # pausa antes de reiniciar
 
@@ -76,28 +76,94 @@ def xy(w, d):
 
 
 def build(grid, nweeks):
-    # Caminho em serpentina coluna a coluna (sobe e desce), comecando fora do mapa a esquerda
-    cells = [c for c in grid]
-    route = []
-    for w in range(nweeks):
-        days = range(7) if w % 2 == 0 else range(6, -1, -1)
-        for d in days:
-            if (w, d) in grid:
-                route.append((w, d))
-    foods = [c for c in route if grid[c] > 0]
-    max_len = START_LEN + len(foods)
+    """Simula uma partida de Snake: a cobra vai atras da comida mais proxima,
+    desvia do proprio corpo, prefere seguir reto e cresce a cada bloco comido."""
+    import heapq
 
-    pre = [(-k, 0) for k in range(3, 0, -1)]
-    last_w, last_d = route[-1]
-    post = [(last_w + k, last_d) for k in range(1, max_len + 2)]
-    path = pre + route + post
+    random.seed(7)
+    W, H = nweeks, 7
+    inside = lambda c: 0 <= c[0] < W and 0 <= c[1] < H
+    dirs = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+
+    remaining = {c for c, lvl in grid.items() if lvl > 0}
+    # entrada pela esquerda, na linha do meio
+    path = [(-3, 3), (-2, 3), (-1, 3)]
+    foods, eat_steps = [], []
+    length = START_LEN
+
+    def body_free_after(cell, dist):
+        # celula ocupada pelo corpo so libera depois que a cauda passar
+        n = len(path)
+        for j in range(1, min(length, n) + 1):
+            if path[n - j] == cell:
+                return dist >= length - j + 1
+        return True
+
+    def plan(targets, ghost=False):
+        head = path[-1]
+        prev = path[-2]
+        d0 = (head[0] - prev[0], head[1] - prev[1])
+        pq = [(0.0, 0, head, d0)]
+        seen = {}
+        parent = {}
+        while pq:
+            cost, dist, cell, d = heapq.heappop(pq)
+            if (cell, d) in seen:
+                continue
+            seen[(cell, d)] = cost
+            if cell in targets and dist > 0:
+                out = []
+                key = (cell, d)
+                while key in parent:
+                    out.append(key[0])
+                    key = parent[key]
+                return out[::-1]
+            for nd in dirs:
+                if nd == (-d[0], -d[1]):
+                    continue
+                nc = (cell[0] + nd[0], cell[1] + nd[1])
+                if not inside(nc) or (not ghost and not body_free_after(nc, dist + 1)):
+                    continue
+                turn = 0.35 if nd != d else 0.0          # prefere seguir reto
+                jitter = random.random() * 0.15            # um pouco de "mao humana"
+                ncost = cost + 1 + turn + jitter
+                if (nc, nd) not in seen:
+                    parent[(nc, nd)] = (cell, d)
+                    heapq.heappush(pq, (ncost, dist + 1, nc, nd))
+        return None
+
+    guard = 0
+    while remaining and guard < 5000:
+        guard += 1
+        route = plan(remaining)
+        if not route:
+            # encurralada: passa por cima do proprio corpo (como um jogador que arrisca)
+            route = plan(remaining, ghost=True)
+        if not route:
+            break
+        for c in route:
+            path.append(c)
+            if c in remaining:
+                remaining.discard(c)
+                foods.append(c)
+                eat_steps.append(len(path) - 1)
+                length += 1
+                break
+
+    # terminou: sai pela direita
+    h = path[-1]
+    while h[1] != 3:
+        h = (h[0], h[1] + (1 if h[1] < 3 else -1)) if body_free_after((h[0], h[1] + (1 if h[1] < 3 else -1)), 1) else (h[0] + 1, h[1])
+        path.append(h)
+    for _ in range(W - h[0] + length + 2):
+        h = (h[0] + 1, h[1])
+        path.append(h)
+
+    max_len = length
     n = len(path)
-    dur = (n - 1) * STEP + max_len * STEP + PAUSE
-
-    # instante (desde o inicio do ciclo) em que a cabeca chega a cada celula
-    t_at = {c: (i * STEP) for i, c in enumerate(path) if c in grid}
-    eat_times = [t_at[c] for c in foods]
-    return path, foods, eat_times, max_len, dur, cells
+    dur = (n - 1) * STEP + PAUSE
+    eat_times = [k * STEP for k in eat_steps]
+    return path, foods, eat_times, max_len, dur, list(grid)
 
 
 def svg(theme, grid, nweeks, path, foods, eat_times, max_len, dur):
@@ -130,10 +196,10 @@ def svg(theme, grid, nweeks, path, foods, eat_times, max_len, dur):
 
     # segmentos: cauda desenhada primeiro, cabeca por ultimo (fica por cima)
     for i in range(max_len - 1, -1, -1):
-        size = CELL if i == 0 else max(CELL - 2 - i * 0.04, 7)
+        size = 15 if i == 0 else max(14 - i * 0.12, 9)
         off = size / 2
         color = theme["head"] if i == 0 else theme["body"]
-        seg = [f'<rect x="{-off:.1f}" y="{-off:.1f}" width="{size:.1f}" height="{size:.1f}" rx="{size / 2.6:.1f}" fill="{color}" opacity="0">']
+        seg = [f'<rect x="{-off:.1f}" y="{-off:.1f}" width="{size:.1f}" height="{size:.1f}" rx="{size / 3.2:.1f}" fill="{color}" opacity="0">']
         seg.append(
             f'<animateMotion dur="{motion_len:.2f}s" '
             f'begin="loop.begin+{i * STEP:.2f}s" fill="freeze" calcMode="linear"><mpath href="#route"/></animateMotion>'
