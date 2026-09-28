@@ -94,7 +94,7 @@ Desenvolvo sistemas internos, bots de integração, automações para ERP, contr
 </details>
 
 <details open>
-<summary><b>🐍 Animação do mapa de contribuições</b></summary>
+<summary><b>🐍 Snake do Gui</b></summary>
 <br>
 
 <p align="center">
